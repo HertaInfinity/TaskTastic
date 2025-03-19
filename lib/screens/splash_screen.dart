@@ -16,32 +16,36 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     // Fade animation setup
     _controller = AnimationController(
-      duration: const Duration(seconds: 2),
+      duration: const Duration(seconds: 2), // Reduced duration for a quicker splash screen
       vsync: this,
     )..forward();
 
     _animation = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
 
-    // Move to home screen after 2.5 seconds
-    Timer(const Duration(seconds: 3), () {
-      Navigator.pushReplacementNamed(context, '/home');
+    // Move to home screen after 2 seconds
+    Timer(const Duration(seconds: 2), () {
+      Navigator.pushReplacementNamed(context, '/home'); // Navigates to home
     });
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller.dispose(); // Properly dispose animation controller
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white, // Change if needed
+      backgroundColor: Colors.white, // Background color of splash screen
       body: Center(
         child: FadeTransition(
-          opacity: _animation,
-          child: Image.asset('assets/logo.png', width: 150, height: 150), // Replace with your logo
+          opacity: _animation, // Applies fade-in effect
+          child: Image.asset(
+            'assets/logo.png', // Make sure this file exists in the assets folder
+            width: 150,
+            height: 150,
+          ),
         ),
       ),
     );

@@ -13,47 +13,141 @@ class _HomeState extends State<Home> {
   List<ToDo> _foundToDo = [];
   final _todoController = TextEditingController();
   String selectedCategory = "Today"; // Default category
+  DateTime? _selectedDeadline; // Holds selected deadline
+
+  @override
+  void initState() {
+    _foundToDo = _filteredTasks();
+    super.initState();
+  }
 
   void _handleToDoChange(ToDo todo) {
     setState(() {
       todo.isDone = !todo.isDone;
     });
-  }
 
-  void _confirmDelete(ToDo todo) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text("Confirm Delete"),
-          content: const Text("Are you sure you want to delete this task?"),
-          actions: <Widget>[
-            TextButton(
-              child: const Text("Cancel"),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            TextButton(
-              child: const Text("Delete"),
-              onPressed: () {
-                setState(() {
-                  todosList.remove(todo);
-                  _foundToDo = List.from(todosList);
-                });
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-        );
-      },
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(todo.isDone
+            ? 'Task "${todo.todoText}" completed!'
+            : 'Task "${todo.todoText}" marked incomplete.'),
+        duration: const Duration(seconds: 2),
+      ),
     );
   }
 
-  @override
-  void initState() {
-    _foundToDo = todosList;
-    super.initState();
+  // Function to Pick Deadline
+  void _pickDeadline(BuildContext context) async {
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime.now(),
+      lastDate: DateTime(2100),
+    );
+
+    if (pickedDate != null) {
+      setState(() {
+        _selectedDeadline = pickedDate;
+      });
+    }
+  }
+
+  // Function to Add Task with Deadline
+  void _addToDoItem(String toDo) {
+    if (toDo.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Task cannot be empty!")),
+      );
+      return;
+    }
+
+    final newTask = ToDo(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: toDo,
+      todoText: toDo,
+      deadline: _selectedDeadline, // Save user-selected deadline
+    );
+
+    setState(() {
+      todosList.add(newTask);
+      _selectedDeadline = null; // Reset deadline after adding task
+    });
+
+    _todoController.clear();
+  }
+
+  void _deleteToDoItem(String id) {
+    final deletedTask = todosList.firstWhere((task) => task.id == id);
+
+    setState(() {
+      todosList.removeWhere((item) => item.id == id);
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Task "${deletedTask.todoText}" deleted!'),
+        action: SnackBarAction(
+          label: "Undo",
+          onPressed: () {
+            setState(() {
+              todosList.add(deletedTask);
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  // Filters tasks based on the search query
+  void _runFilter(String enteredKeyword) {
+    List<ToDo> results = [];
+
+    if (enteredKeyword.isEmpty) {
+      results = _filteredTasks(); // Show all tasks if search is empty
+    } else {
+      results = _filteredTasks().where((todo) =>
+          todo.todoText?.toLowerCase().contains(enteredKeyword.toLowerCase()) ??
+          false).toList();
+    }
+
+    setState(() {
+      _foundToDo = results; // Update displayed tasks
+    });
+  }
+
+  // Returns tasks based on the selected category
+  List<ToDo> _filteredTasks() {
+    DateTime now = DateTime.now();
+
+    return todosList.where((todo) {
+      if (selectedCategory == "Today") {
+        return todo.deadline != null &&
+            todo.deadline!.day == now.day &&
+            todo.deadline!.month == now.month &&
+            todo.deadline!.year == now.year;
+      } else if (selectedCategory == "Pending") {
+        return todo.deadline == null || todo.deadline!.isAfter(now);
+      } else if (selectedCategory == "Overdue") {
+        return todo.deadline != null && todo.deadline!.isBefore(now);
+      }
+      return false;
+    }).toList();
+  }
+
+  Widget _categoryButton(String category, IconData icon) {
+    return ElevatedButton.icon(
+      onPressed: () {
+        setState(() {
+          selectedCategory = category;
+          _foundToDo = _filteredTasks();
+        });
+      },
+      icon: Icon(icon),
+      label: Text(category),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: selectedCategory == category ? tdBlue : Colors.grey,
+      ),
+    );
   }
 
   Widget searchBox() {
@@ -64,16 +158,12 @@ class _HomeState extends State<Home> {
         borderRadius: BorderRadius.circular(20),
       ),
       child: TextField(
-        controller: _todoController,
-        decoration: const InputDecoration(
-          contentPadding: EdgeInsets.all(0),
-          prefixIcon: Icon(Icons.search, color: Colors.black, size: 20),
-          prefixIconConstraints: BoxConstraints(maxHeight: 20, minWidth: 25),
-          border: InputBorder.none,
-          hintText: 'Search',
-          hintStyle: TextStyle(color: Colors.grey),
-        ),
         onChanged: (value) => _runFilter(value),
+        decoration: const InputDecoration(
+          hintText: 'Search tasks...',
+          border: InputBorder.none,
+          icon: Icon(Icons.search),
+        ),
       ),
     );
   }
@@ -83,7 +173,7 @@ class _HomeState extends State<Home> {
     return Scaffold(
       backgroundColor: tdBGColor,
       appBar: _buildAppBar(),
-      drawer: _buildDrawer(), // Add Navigation Drawer
+      drawer: _buildDrawer(),
       body: Stack(
         children: [
           Container(
@@ -94,118 +184,104 @@ class _HomeState extends State<Home> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _categoryButton("Today"),
-                    _categoryButton("Pending"),
-                    _categoryButton("Overdue"),
+                    _categoryButton("Today", Icons.today),
+                    _categoryButton("Pending", Icons.pending),
+                    _categoryButton("Overdue", Icons.error),
                   ],
                 ),
                 Expanded(
-                  child: ListView(
-                    children: [
-                      Container(
-                        margin: const EdgeInsets.only(top: 30, bottom: 10),
-                        child: Text(
-                          '$selectedCategory Tasks',
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      for (ToDo todo in _foundToDo.reversed)
-                        ToDoItem(
-                          todo: todo,
-                          onToDoChanged: _handleToDoChange,
-                          onDeleteItem: _confirmDelete,
-                        ),
-                    ],
-                  ),
+                  child: _buildTaskList(),
                 ),
               ],
             ),
           ),
+          _buildBottomInputBar(),
         ],
       ),
     );
   }
 
-  // Function to filter tasks based on category
-  List<ToDo> _filteredTasks() {
-    DateTime now = DateTime.now();
-    return todosList.where((todo) {
-      if (selectedCategory == "Today") {
-        return todo.deadline?.day == now.day &&
-            todo.deadline?.month == now.month &&
-            todo.deadline?.year == now.year;
-      } else if (selectedCategory == "Pending") {
-        return todo.deadline == null || todo.deadline!.isAfter(now);
-      } else if (selectedCategory == "Overdue") {
-        return todo.deadline != null && todo.deadline!.isBefore(now);
-      }
-      return false;
-    }).toList();
-  }
-
-  Widget _categoryButton(String category) {
-    return ElevatedButton(
-      onPressed: () {
-        setState(() {
-          selectedCategory = category;
-        });
-      },
-      style: ElevatedButton.styleFrom(
-        backgroundColor: selectedCategory == category ? tdBlue : Colors.grey[300],
-        foregroundColor: selectedCategory == category ? Colors.white : Colors.black,
+  Widget _buildTaskList() {
+    return Expanded(
+      child: ReorderableListView(
+        onReorder: (oldIndex, newIndex) {
+          setState(() {
+            if (newIndex > oldIndex) newIndex--;
+            final task = todosList.removeAt(oldIndex);
+            todosList.insert(newIndex, task);
+          });
+        },
+        children: [
+          for (var todo in _foundToDo)
+            Dismissible(
+              key: Key(todo.id!),
+              direction: DismissDirection.endToStart,
+              background: Container(
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                color: Colors.red,
+                child: const Icon(Icons.delete, color: Colors.white),
+              ),
+              onDismissed: (direction) {
+                _deleteToDoItem(todo.id!);
+              },
+              child: ToDoItem(
+                todo: todo,
+                onToDoChanged: _handleToDoChange,
+              ),
+            ),
+        ],
       ),
-      child: Text(category),
     );
   }
 
-  // Drawer Widget
-  Widget _buildDrawer() {
-    return Drawer(
-      child: Column(
+  Widget _buildBottomInputBar() {
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: Row(
         children: [
-          UserAccountsDrawerHeader(
-            accountName: const Text("John Doe"), // Placeholder name
-            accountEmail: const Text("johndoe@example.com"), // Placeholder email
-            currentAccountPicture: CircleAvatar(
-              backgroundImage: AssetImage('assets/avatar.jpeg'), // Profile Image
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 20, right: 10, left: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _todoController,
+                      decoration: InputDecoration(
+                        hintText: 'Enter a task...',
+                        border: InputBorder.none,
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () => _todoController.clear(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.calendar_today, color: Colors.grey),
+                    onPressed: () => _pickDeadline(context),
+                  ),
+                ],
+              ),
             ),
           ),
-          ListTile(
-            leading: const Icon(Icons.today),
-            title: const Text("Today"),
-            onTap: () {
-              setState(() {
-                selectedCategory = "Today";
-              });
-              Navigator.pop(context);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.pending_actions),
-            title: const Text("Pending"),
-            onTap: () {
-              setState(() {
-                selectedCategory = "Pending";
-              });
-              Navigator.pop(context);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.warning),
-            title: const Text("Overdue"),
-            onTap: () {
-              setState(() {
-                selectedCategory = "Overdue";
-              });
-              Navigator.pop(context);
-            },
-          ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.settings),
-            title: const Text("Settings"),
-            onTap: () {
-              // Navigate to settings screen (to be implemented)
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: tdBlue,
+              shape: const CircleBorder(),
+              padding: const EdgeInsets.all(18),
+            ),
+            child: const Icon(Icons.add, color: Colors.white),
+            onPressed: () {
+              if (_todoController.text.trim().isNotEmpty) {
+                _addToDoItem(_todoController.text);
+              }
             },
           ),
         ],
@@ -213,27 +289,7 @@ class _HomeState extends State<Home> {
     );
   }
 
-  AppBar _buildAppBar() {
-    return AppBar(
-      backgroundColor: tdBGColor,
-      elevation: 0,
-      title: const Text("TaskTastic"),
-    );
-  }
+  AppBar _buildAppBar() => AppBar(title: const Text("TaskTastic"));
 
-  void _runFilter(String enteredKeyword) {
-    List<ToDo> results = [];
-    if (enteredKeyword.isEmpty) {
-      results = todosList;
-    } else {
-      results = todosList
-          .where((todo) =>
-              todo.title!.toLowerCase().contains(enteredKeyword.toLowerCase()))
-          .toList();
-    }
-
-    setState(() {
-      _foundToDo = results;
-    });
-  }
+  Widget _buildDrawer() => Drawer();
 }

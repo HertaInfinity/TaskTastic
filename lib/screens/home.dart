@@ -4,6 +4,8 @@ import '../constants/colors.dart';
 import '../widgets/todo_item.dart';
 
 class Home extends StatefulWidget {
+  const Home({super.key});
+
   @override
   _HomeState createState() => _HomeState();
 }
